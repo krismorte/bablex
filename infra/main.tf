@@ -168,9 +168,9 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      TABLE_NAME            = aws_dynamodb_table.library.name
-      LOG_LEVEL             = "INFO"
-      AUTH_MODE             = "aws"
+      TABLE_NAME = aws_dynamodb_table.library.name
+      LOG_LEVEL  = "INFO"
+      AUTH_MODE  = "aws"
     }
   }
 
@@ -184,10 +184,10 @@ resource "aws_apigatewayv2_api" "http" {
 
 
   cors_configuration {
-    allow_origins  = ["*"]
-    allow_methods  = ["DELETE", "GET", "OPTIONS", "PATCH", "POST"]
-    allow_headers  = ["authorization", "content-type"]
-    max_age        = 300
+    allow_origins = ["*"]
+    allow_methods = ["DELETE", "GET", "OPTIONS", "PATCH", "POST"]
+    allow_headers = ["authorization", "content-type"]
+    max_age       = 300
   }
 
 
@@ -979,7 +979,7 @@ resource "aws_apigatewayv2_stage" "default" {
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.apigw.arn
-    format          = jsonencode({
+    format = jsonencode({
       requestId               = "$context.requestId"
       requestTime             = "$context.requestTime"
       httpMethod              = "$context.httpMethod"
