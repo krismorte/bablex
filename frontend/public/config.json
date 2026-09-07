@@ -1,0 +1,8 @@
+{
+  "mode": "local",
+  "apiBaseUrl": "/api",
+  "cognitoAuthority": "",
+  "cognitoClientId": "",
+  "redirectUri": "",
+  "logoutUri": ""
+}

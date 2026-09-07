@@ -1,0 +1,12 @@
+aws_region            = "eu-west-1"
+project_name          = "bablex"
+environment           = "dev"
+cognito_domain_prefix = "replace-with-a-unique-prefix"
+frontend_dist_dir     = "../frontend/dist"
+
+# Lock the production app to your current public IP. Use /32 for one IPv4 address.
+allowed_public_ipv4_cidrs = ["203.0.113.10/32"]
+#backend
+bucket = "krismorte-terraform-state-853696859294"
+key    = "bablex-infra/terraform.tfstate
+region = "us-east-1"

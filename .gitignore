@@ -1,0 +1,40 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform.tfvars
+infra/lambda.zip
+infra/bootstrap
+frontend/node_modules/
+frontend/dist/
+backend/vendor/
+
+# Local development
+.kumo-data/
+.env
+frontend/node_modules/
+frontend/dist/
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.zip
+infra/bootstrap
+# Terraform local/sensitive values
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+terraform.auto.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+crash.log
+crash.*.log
+# Credentials / secrets / keys
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials.*
+.aws/
+# Generated deployment artifacts

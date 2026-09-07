@@ -1,0 +1,102 @@
+name: Create release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bablex-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Avoid recursively releasing the release commit itself.
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine semantic version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          LAST_TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          if [[ -z "$LAST_TAG" ]]; then
+            LAST_TAG="v0.0.0"
+            RANGE="HEAD"
+          else
+            RANGE="${LAST_TAG}..HEAD"
+          fi
+
+          SUBJECTS="$(git log "$RANGE" --format='%s%n%b')"
+          BUMP="patch"
+
+          if echo "$SUBJECTS" | grep -Eq 'BREAKING CHANGE:|^[a-zA-Z]+(\([^)]*\))?!:'; then
+            BUMP="major"
+          elif echo "$SUBJECTS" | grep -Eq '^feat(\([^)]*\))?:'; then
+            BUMP="minor"
+          fi
+
+          VERSION="${LAST_TAG#v}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEXT" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Next release: v$NEXT ($BUMP)"
+
+      - name: Generate changelog entry
+        id: notes
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$PREVIOUS_TAG" == "v0.0.0" ]]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREVIOUS_TAG}..HEAD"
+          fi
+
+          {
+            echo "## ${TAG}"
+            echo
+            git log "$RANGE" --pretty='- %s (%h)'
+            echo
+          } > release-notes.md
+
+          cat release-notes.md
+
+      - name: Create Git tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Bablex $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --title "Bablex $TAG" --notes-file release-notes.md

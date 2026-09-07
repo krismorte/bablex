@@ -1,0 +1,138 @@
+name: Deploy production
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Tag or commit to deploy (for example v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: bablex-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Backend tests
+        working-directory: backend
+        run: go test ./...
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test -- --run
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.3"
+
+      - name: Resolve deployed version
+        id: release
+        shell: bash
+        run: |
+          REF="${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}"
+          echo "Deploying Bablex ${REF}"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.2.4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Build Lambda
+        working-directory: backend
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build \
+            -tags lambda.norpc -trimpath -ldflags='-s -w' \
+            -o ../infra/bootstrap ./cmd/api
+          chmod 0755 ../infra/bootstrap
+          cd ../infra
+          zip -j -X lambda.zip bootstrap
+          rm bootstrap
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: infra
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+          TF_VAR_environment: ${{ vars.DEPLOY_ENVIRONMENT }}
+          TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
+          TF_VAR_allowed_public_ipv4_cidrs: ${{ secrets.ALLOWED_PUBLIC_IPV4_CIDRS_JSON }}
+          TF_VAR_cloudfront_api_shared_secret: ${{ secrets.CLOUDFRONT_API_SHARED_SECRET }}
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Terraform apply
+        working-directory: infra
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+          TF_VAR_environment: ${{ vars.DEPLOY_ENVIRONMENT }}
+          TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
+          TF_VAR_allowed_public_ipv4_cidrs: ${{ secrets.ALLOWED_PUBLIC_IPV4_CIDRS_JSON }}
+          TF_VAR_cloudfront_api_shared_secret: ${{ secrets.CLOUDFRONT_API_SHARED_SECRET }}
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Invalidate CloudFront
+        working-directory: infra
+        run: |
+          DIST_ID="$(terraform output -raw cloudfront_distribution_id)"
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*'

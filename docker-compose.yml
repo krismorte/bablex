@@ -1,0 +1,44 @@
+services:
+  kumo:
+    image: ghcr.io/sivchari/kumo:latest
+    container_name: personal-library-kumo
+    ports:
+      - "4566:4566"
+    environment:
+      KUMO_DATA_DIR: /data
+      KUMO_LOG_LEVEL: info
+    volumes:
+      - kumo-data:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    container_name: personal-library-api
+    depends_on:
+      - kumo
+    environment:
+      AUTH_MODE: local
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_ENDPOINT_URL: http://kumo:4566
+      TABLE_NAME: personal-library
+      LOCAL_AUTH_SECRET: local-personal-library-secret-change-me
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+    container_name: personal-library-web
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  kumo-data:
