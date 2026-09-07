@@ -2,6 +2,10 @@
 
 Small multi-user library application designed for low cost in AWS and repeatable local testing with Kumo.
 
+### Why
+Before any deepdown on the solution let me give you a quickly why. Being a Devops for big and mature comapnies sometimes take the opportunity for you to start from the scratch and review a lot of small problems. 
+The big WHY here is I need a solution that I have 100% control to test it, maintain and do the improvements. Also one big requeriment here is to be cheap as possible, this is the main reason for the serverless approach. Feel free to give suggestions and open issues in the solution.
+
 ## Stack
 
 Production:
