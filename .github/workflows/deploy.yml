@@ -107,7 +107,7 @@ jobs:
 
       - name: Terraform init
         working-directory: infra
-        run: terraform init
+        run: terraform init -backend-config=backend.hcl
 
       - name: Terraform plan
         working-directory: infra
